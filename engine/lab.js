@@ -40,7 +40,7 @@ Spout render; then the body lines on top.
 import { compileProgram, createTexture2D, attachToFramebuffer, quad, floatPrecision } from './gl.js';
 import { BodyPass } from './body.js';
 
-const HIST_MAX = 6;   // 9 fixed samplers + 6 = 15 of the 16 texture units WebGL 2 guarantees
+const HIST_MAX = 25;  // one sampler2DArray with HIST_MAX layers: a single texture unit however many slots
 const JOINTS = ['head', 'torso', 'lwrist', 'rwrist', 'lelbow', 'relbow', 'lhip', 'rhip', 'lhand', 'rhand',
   'nose', 'leye', 'reye', 'lear', 'rear', 'mouth', 'lshoulder', 'rshoulder', 'lknee', 'rknee', 'lankle', 'rankle'];
 export const BODY_UNIFORMS = JOINTS.flatMap((j) => ['x', 'y', 'z', 'v', 'p'].map((s) => `tf_${j}_${s}`)).concat(['tf_present', 'tf_dist', 'tf_speed', 'tf_size']);
@@ -50,8 +50,9 @@ in vec2 aPos; out vec2 vUv;
 void main(void) { gl_Position = vec4(aPos, 0.0, 1.0); vUv = aPos * 0.5 + 0.5; }`;
 
 function prelude(precision, dials) {
-  const histDecl = Array.from({ length: HIST_MAX }, (_, i) => `uniform sampler2D t_hist${i};`).join('\n');
-  const histCase = Array.from({ length: HIST_MAX }, (_, i) => `  if (k == ${i}) return texture(t_hist${i}, _f(uv)).rgb;`).join('\n');
+  const histDecl = `uniform mediump sampler2DArray t_hist_arr; uniform int hist_head; uniform float hist_age[${HIST_MAX}];`;
+  const histCase = `  int idx = ((hist_head - k) % hist_n + hist_n) % hist_n;
+  return texture(t_hist_arr, vec3(_f(uv), float(idx))).rgb;`;
   return `#version 300 es
 precision ${precision} float; precision highp int; precision mediump sampler2D;
 in vec2 vUv; out vec4 fragColor;
@@ -140,10 +141,12 @@ vec3 cutout(vec2 uv) { return cam(uv) * mask(uv); }
 vec3 stamps(vec2 uv) { return texture(t_stamps, _f(uv)).rgb; }
 vec3 background(vec2 uv) { return texture(t_background, _f(uv)).rgb; }
 vec3 hist(int k, vec2 uv) {
-  k = clamp(k, 0, max(hist_n - 1, 0));
+  if (hist_n <= 0) return cam(uv);
+  k = clamp(k, 0, hist_n - 1);
 ${histCase}
-  return cam(uv);
 }
+// seconds since slot k was captured, continuous (the page's clock, not the ring's turns)
+float histAge(int k) { return hist_age[clamp(k, 0, 24)]; }
 vec3 hsv(float h, float s, float v) {
   vec3 k = vec3(1.0, 2.0 / 3.0, 1.0 / 3.0);
   vec3 p = abs(fract(vec3(h) + k) * 6.0 - 3.0);
@@ -178,12 +181,12 @@ export class LabEngine {
     this.uniforms = {};                     // tf_* and the dials, by name
     this.dialNames = [];
     this.stage = { camera_behind: false, matte: { on: false, feather_in: 0.015, feather_out: 0.04, inside: 1.0, outside: 0.0 },
-                   opacity: 1.0, history: 0, stamp_every: 0, stamp_fade: 1.0, cam_blur: 12, frame_blur: 24, mask_feather: 0.02, mask_smooth: 0.35, diffuse: 0 };
+                   opacity: 1.0, history: 0, history_every: 0, history_source: 'camera', stamp_every: 0, stamp_fade: 1.0, cam_blur: 12, frame_blur: 24, mask_feather: 0.02, mask_smooth: 0.35, diffuse: 0 };
     this.keyBlack = false;
     this.chains = []; this.chainsAdditive = true;          // the lines: outline, bones, hands
     this.discs = []; this.discColor = [1, 1, 1]; this.discSoft = true;   // [{x, y (up), rad, a}] the landmark discs
     this.fill = { color: [1, 1, 1], alpha: 0 };              // the mask as a faint shape
-    this.seedsIntoFrame = true;                              // seeds written into the feedback frame (true) or drawn on top (false)
+    this.seedsMode = 'frame';                                // where the per-frame seeds go: 'frame' (into the feedback), 'top' (over the screen), 'takes' (nowhere per frame; ring captures always get them)
     this.camImage = null; this.maskImage = null;
     this.haveCam = false; this.haveMask = false;
     this.stampClock = 0; this.captured = false; this.wantCapture = false;
@@ -285,9 +288,20 @@ export class LabEngine {
     this.frameSoft = this._fbtex(hw, hh); this.frameBlur = this._fbtex(hw, hh);
     this.stampA = this._fbtex(W, H); this.stampB = this._fbtex(W, H);
     this.background = this._fbtex(W, H);
-    this.hist = Array.from({ length: HIST_MAX }, () => this._fbtex(hw, hh));
+    // the ring: one 2D array texture, one framebuffer retargeted per layer
+    if (this.histArr) gl.deleteTexture(this.histArr);
+    this.histArr = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.histArr);
+    gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, hw, hh, HIST_MAX);
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    this.histFb = gl.createFramebuffer();
+    this.histW = hw; this.histH = hh;
     this.histHead = 0; this.histCount = 0;
-    for (const t of [this.frameA, this.frameB, this.screen, this.stampA, this.stampB, this.background, ...this.hist, this.maskA, this.maskB, this.maskSoft, this.camBlur, this.frameSoft, this.frameBlur]) {
+    this.histBorn = new Array(HIST_MAX).fill(-1);   // performance clock seconds each slot was captured; -1 = never
+    for (const t of [this.frameA, this.frameB, this.screen, this.stampA, this.stampB, this.background, this.maskA, this.maskB, this.maskSoft, this.camBlur, this.frameSoft, this.frameBlur]) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, t.fb); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
     }
   }
@@ -304,7 +318,7 @@ export class LabEngine {
     const gl = this.gl;
     const dials = Object.keys(preset.dials || {});
     const taken = new Set(['cam', 'camBlur', 'mask', 'maskSoft', 'maskGrad', 'maskNear', 'frame', 'frameSoft', 'frameBlur', 'cutout', 'stamps', 'background', 'hist',
-      'hsv', 'lum', 'chroma', 'noise3', 'curl', 'wells', 'res', 'time', 'aspect', 'hist_n', 'uv', 'ret', 'alpha', ...BODY_UNIFORMS,
+      'hsv', 'lum', 'chroma', 'noise3', 'curl', 'wells', 'histAge', 'hist_head', 'hist_age', 'res', 'time', 'aspect', 'hist_n', 'uv', 'ret', 'alpha', ...BODY_UNIFORMS,
       'floor', 'ceil', 'fract', 'mix', 'min', 'max', 'abs', 'sin', 'cos', 'tan', 'pow', 'exp', 'log', 'sqrt', 'length', 'clamp', 'step', 'smoothstep', 'dot', 'cross',
       'normalize', 'texture', 'mod', 'sign', 'round', 'trunc', 'in', 'out', 'float', 'int', 'bool', 'vec2', 'vec3', 'vec4', 'if', 'else', 'for', 'while', 'return',
       'const', 'uniform', 'sampler2D', 'main', 'discard', 'break', 'continue', 'true', 'false']);
@@ -331,6 +345,8 @@ export class LabEngine {
   clear() {
     const gl = this.gl;
     for (const t of [this.frameA, this.frameB, this.stampA, this.stampB]) { gl.bindFramebuffer(gl.FRAMEBUFFER, t.fb); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT); }
+    if (this.histBorn) this.histBorn.fill(-1);
+    this.histCount = 0; this.histClock = 0;
   }
   captureBackground() { this.wantCapture = true; }
 
@@ -414,12 +430,29 @@ export class LabEngine {
       this._blur(this.maskA.tex, this.maskSoft, this.tmpHalf, st.mask_feather * this.height);
     }
     if (this.haveCam) this._blur(this.camUp.tex, this.camBlur, this.tmpHalf2, st.cam_blur);
-    // the history ring
+    // the history ring: every frame by default, or one capture per history_every seconds.
+    // history_source 'cutout' stores the masked person WITH the stage's seeds drawn on
+    // (each slot is then one "take": its own layer, gone when the ring turns past it).
     const histN = Math.max(0, Math.min(HIST_MAX, st.history | 0));
     if (histN > 0 && this.haveCam) {
-      this.histHead = (this.histHead + 1) % histN;
-      this._run(this.pCopy, this.hist[this.histHead], (tex, p) => { tex('src', this.camUp.tex); gl.uniform1f(p.loc('gain'), 1); gl.uniform1f(p.loc('flipX'), 0); gl.uniform1f(p.loc('flipY'), 0); });
-      this.histCount = Math.min(histN, this.histCount + 1);
+      this.histClock = (this.histClock || 0) + dt;
+      const every = st.history_every || 0;
+      if (every <= 0 || this.histClock >= every) {
+        this.histClock = 0;
+        this.histHead = (this.histHead + 1) % histN;
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.histFb);
+        gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, this.histArr, 0, this.histHead);
+        const buf = { fb: this.histFb, w: this.histW, h: this.histH };
+        if (st.history_source === 'cutout' && this.haveMask) {
+          // cam times mask via the stamp pass with fade 0: acc*0 + cam*m
+          this._run(this.pStamp, buf, (tex, p) => { tex('acc', this.camUp.tex); tex('cam', this.camUp.tex); tex('msk', this.maskA.tex); gl.uniform1f(p.loc('fade'), 0); gl.uniform1f(p.loc('add'), 1); });
+          this._drawSeeds(buf);                    // the outline (and whatever seeds are on) burned into the take
+        } else {
+          this._run(this.pCopy, buf, (tex, p) => { tex('src', this.camUp.tex); gl.uniform1f(p.loc('gain'), 1); gl.uniform1f(p.loc('flipX'), 0); gl.uniform1f(p.loc('flipY'), 0); });
+        }
+        this.histBorn[this.histHead] = this.time;
+        this.histCount = Math.min(histN, this.histCount + 1);
+      }
     }
     // the stamps: decay every frame, add the cutout every stamp_every seconds
     if (st.stamp_every > 0 && this.haveCam && this.haveMask) {
@@ -446,10 +479,17 @@ export class LabEngine {
       tex('t_cam', this.camUp.tex); tex('t_cam_blur', this.camBlur.tex); tex('t_mask', this.maskA.tex); tex('t_mask_soft', this.maskSoft.tex);
       tex('t_frame', this.frameA.tex); tex('t_frame_soft', this.frameSoft.tex); tex('t_frame_blur', this.frameBlur.tex);
       tex('t_stamps', this.stampA.tex); tex('t_background', this.background.tex);
-      for (let i = 0; i < HIST_MAX; i++) {
-        const idx = ((this.histHead - i) % histN + histN) % histN;
-        tex('t_hist' + i, histN > 0 ? this.hist[idx].tex : this.camUp.tex);
+      // the ring: one array texture on one unit; ages per slot k (newest first), continuous
+      gl.activeTexture(gl.TEXTURE0 + 15); gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.histArr); gl.bindSampler(15, null);
+      gl.uniform1i(p.loc('t_hist_arr'), 15);
+      gl.uniform1i(p.loc('hist_head'), this.histHead);
+      const ages = new Float32Array(HIST_MAX);
+      for (let k = 0; k < HIST_MAX; k++) {
+        const idx = histN > 0 ? ((this.histHead - k) % histN + histN) % histN : 0;
+        const born = this.histBorn[idx];
+        ages[k] = born >= 0 ? this.time - born : 1e6;   // a never-filled slot is infinitely old: invisible to any fade
       }
+      gl.uniform1fv(p.loc('hist_age'), ages);
       gl.uniform2f(p.loc('res'), this.frameA.w, this.frameA.h);   // the frame's own size: pixel offsets in a preset are frame pixels
       gl.uniform1f(p.loc('time'), this.time);
       gl.uniform1f(p.loc('aspect'), this.height / this.width);
@@ -459,8 +499,9 @@ export class LabEngine {
     };
     this._run(this.pFeed, this.frameB, bindAll);
     const s = this.frameA; this.frameA = this.frameB; this.frameB = s;
-    // the seeds: what the body writes into the frame this step, added to what the feed left
-    if (this.seedsIntoFrame) this._drawSeeds(this.frameA);
+    // the seeds: what the body writes into the frame this step, added to what the feed left.
+    // In 'takes' mode nothing is drawn per frame: the ring captures burn the seeds into each take and that is all.
+    if (this.seedsMode === 'frame') this._drawSeeds(this.frameA);
     // diffusion: the frame itself blurred a little every step, so the discrete iterations of the
     // transport melt into each other instead of standing as distinct layers (stage.diffuse, px per step)
     if (st.diffuse > 0) {
@@ -482,7 +523,7 @@ export class LabEngine {
       gl.uniform1f(p.loc('fin'), m.feather_in || 0); gl.uniform1f(p.loc('fout'), m.feather_out || 0);
       gl.uniform1f(p.loc('camIn'), m.inside == null ? 1 : m.inside); gl.uniform1f(p.loc('camOut'), m.outside == null ? 0 : m.outside);
     });
-    if (!this.seedsIntoFrame) this._drawSeeds(null);
+    if (this.seedsMode === 'top') this._drawSeeds(null);
     this._spanEnd();
     this.stats.frameMs = performance.now() - t0;
   }

@@ -13,19 +13,18 @@ Every frame, two small shader programs you write run over the screen:
   is the pixel being computed (x right, y down, 0..1), and `ret` is the
   colour you give it.
 - **show** decides what reaches the screen: `ret` is the colour and
-  `alpha` how much it covers the layers behind (the live camera, when the
-  Stage puts it there).
+  `alpha` how much it covers the layers behind.
 
-After feed runs, the Stage's **seeds** are drawn into the feedback frame:
-the silhouette outline, bones, hand lines, landmark discs and mask fill,
-each with its own colour and strength. So a preset does not have to draw
-the body; it decides how what the body wrote *moves*.
+After feed runs, the Stage's **seeds** can be drawn into the feedback
+frame: the silhouette outline, bones, hand lines, landmark discs and
+mask fill, each with its own colour and strength. A preset does not have
+to draw the body; it decides how what the body wrote *moves*.
 
 ## 2. Duplicate and strip
 
-Open the panel, pick **silhouette effuse**, press **Duplicate**. You now
-own a copy. Press **Text: the two shader bodies** on the Look tab, and
-replace both bodies with the smallest possible effect:
+Open the panel, pick a preset, press **Duplicate**. You now own a copy.
+Press **Text: the two shader bodies** on the Look tab, and replace both
+bodies with the smallest possible effect:
 
 feed:
 ```glsl
@@ -38,11 +37,10 @@ ret = frame(uv);
 alpha = 1.0;
 ```
 
-Press **Apply**. The screen shows the seeds fading in place: `frame(uv)`
-reads the feedback frame, `fade` dims it every step. `fade` works because
-the preset declares a dial with that name; every dial is a variable your
-code can use, and the panel shows exactly the dials you declare, nothing
-else.
+Press **Apply**. The seeds fade in place: `frame(uv)` reads the feedback
+frame, `fade` dims it every step. `fade` works because the preset
+declares a dial with that name; every dial is a variable your code can
+use, and the panel shows exactly the dials you declare, nothing else.
 
 ## 3. Make it move
 
@@ -65,11 +63,29 @@ p += curl(vec2(uv.x / aspect, uv.y) * 6.0, time * 0.3) * 0.002;  // a swirling f
 ret = frame(p) * fade;
 ```
 
-That is the whole trick behind both shipped effects: seeds are written
-onto the body, and the feed's read-position pulls them outward through a
-flow. Add dials for the numbers you want on sliders.
+That is the trick behind the shipped effects: seeds are written onto the
+body, and the feed's read-position pulls them outward through a flow.
+Add dials for the numbers you want on sliders. The Stage's **Diffusion**
+blurs the feedback a little every step, which melts the discrete
+iterations into one smooth motion.
 
-## 4. The inputs you can read
+## 4. Takes: snapshots with a lifetime
+
+The Stage's **History ring** keeps up to 25 slots. With source
+`cutout`, each slot is a *take*: the masked person with the seeds burned
+in, captured every `every (s)` seconds, deleted when the ring turns past
+it. In a shader:
+
+```glsl
+vec3 t = hist(k, uv);                       // take k, newest first
+float w = exp(-histAge(k) / 3.0);           // its age in seconds, continuous
+```
+
+`histAge` is why take fades never step or snap. The **outlines** preset
+is this pattern complete, with a noise-eaten dissolve; read its show.
+(Source `camera` stores the whole frame instead: echoes, frozen worlds.)
+
+## 5. The inputs you can read
 
 Everything is a function of screen position, so any input can drive
 anything:
@@ -78,34 +94,36 @@ anything:
 |---|---|
 | `cam(uv)` / `camBlur(uv)` | the live camera, sharp and blurred |
 | `mask(uv)` / `maskSoft(uv)` | the person: 1 inside, 0 outside, hard and feathered |
-| `maskGrad(uv, reach)` | which way the person's edge is |
+| `maskGrad(uv)` / `maskGrad(uv, reach)` | which way the person's edge is |
 | `maskNear(uv, dist)` | how much person lies within `dist` |
-| `frame(uv)` / `frameSoft(uv)` / `frameBlur(uv)` | the feedback frame and two blurred copies |
+| `frame(uv)` / `frameSoft(uv)` / `frameBlur(uv)` | the feedback frame, and blurred 3 px / heavily |
 | `cutout(uv)` | the camera times the mask: the person alone |
-| `hist(k, uv)` | the camera k frames ago (Stage: History) |
-| `stamps(uv)` | the person stamped every N seconds, fading (Stage: Stamps) |
-| `background(uv)` | the empty scene, captured when nobody is in view |
-| `noise3(p)` / `curl(p, t)` | smooth 3D noise, and a swirling flow built from it |
-| `wells(uv, push, sharp, base, gain)` | outward push from fifteen body joints |
+| `hist(k, uv)` / `histAge(k)` | ring slot k and its age in seconds (Stage: History ring) |
+| `stamps(uv)` | the person stamped every N seconds into one fading buffer (Stage: Stamps) |
+| `background(uv)` | the empty scene, captured on B or when nobody is in view |
+| `noise3(p)` | smooth 3D noise; the third axis is usually time |
+| `curl(p, t)` | a swirling flow that never pauses everywhere at once |
+| `wells(uv, push, sharp, base, gain)` | outward push from fifteen body joints, each faded by its presence |
 | `hsv(h,s,v)` / `lum(c)` / `chroma(c)` | colour helpers |
-| `tf_<joint>_x/y/z/v` | any joint's position, nearness and speed (`tf_lwrist_x`, `tf_head_v`, ...) |
+| `tf_<joint>_x/y/z/v/p` | any joint's position, nearness, speed and presence (`tf_lwrist_x`, `tf_head_v`, ...) |
+| `tf_size` | the body's size on screen, steady through a turn |
 | `time`, `res`, `aspect` | seconds, the frame's size in pixels, height over width |
 
-A dial can also *follow* a body reading: in the Look tab set its
-**follows** to a source (wrist speed, body distance, hands raised...) and
-a range; the dial then rides the reading, live. That is how an effect
-breathes with the performer with no code at all.
+A dial can also *follow* a body reading: set its **follows** to a source
+(wrist speed, body distance, hands raised...) and a range; the dial then
+rides the reading live. And a dial can *drive a Stage value*
+(`"stage": "history_every"`), which is how a preset puts buffer timing
+on a slider.
 
-## 5. The Stage
+## 6. Combining effects
 
-The Stage tab is everything around your two programs: which body parts
-are written into the frame as seeds and in what colour, whether the live
-camera sits behind the effect and at what opacity inside and outside the
-mask, **Diffusion** (a per-step blur of the feedback frame that melts the
-iterations together — the single best "make it smoother" control), and
-the buffers. Buffer rows are dimmed when your code never reads them.
+**apply another preset's effect** (Look tab): pick a preset, copy its
+feed or its show into the one you are editing; the dials its code needs
+come along. It is a copy, yours to edit, and the source is untouched.
+This is how "the takes carried by video effuse's flow" was made: outlines'
+takes, video effuse's feed, one changed injection line.
 
-## 6. Keep it
+## 7. Keep it
 
 **Save as** with your name for it. Your preset lands in
 `presets_config.json` beside the shipped ones and survives updates. The
@@ -119,6 +137,6 @@ editor and press **R** in the page to reload.
 - **Chromatic lag**: read each colour channel from `hist()` at different
   ages.
 - **Frozen world**: show `background(uv)` everywhere except inside the
-  mask, where `hist(7, uv)` plays the past.
+  mask, where an old take plays.
 - **Aura**: `maskNear(uv, reach)` minus `mask(uv)` is a halo band; colour
   it by `tf_speed`.

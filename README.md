@@ -6,30 +6,36 @@ flow engine, and an effect is a **preset**: two short shader bodies and a
 set of dials, editable live in the page's own panel. Free to use and to
 build on (MIT).
 
-Two effects ship as a starting point:
+Three effects ship as starting points:
 
 - **silhouette effuse** — light born on the body's edge, hands and
   landmarks, carried outward by a swirling flow, coloured from a hue range.
 - **video effuse** — the person's own picture is the light: the masked
   video boils in place and streams off the body as they move.
+- **outlines** — a series of takes: every few seconds the person, outline
+  and all, is snapshotted into its own layer, which ages, dissolves along
+  a ragged pattern, and is deleted; the live person stands solid over them.
 
-Everything you see is deterministic image feedback: no randomness on
-screen, no video files, no network. The person is the source.
+Everything on screen is deterministic image feedback fed by the person:
+no video files, no network, no randomness that is not asked for.
 
 ## What it needs
 
 A running [TouchFree Desktop](https://bigskyinteractive.com) app on the
 same machine. The page is a TouchFree **content page**: TouchFree serves
-it, and provides everything it consumes:
+it and provides everything it consumes:
 
 | Input | From |
 |---|---|
-| The live camera picture | `/api/camera/mjpeg` (mirrored, timestamped) |
+| The live camera picture | `/api/camera/mjpeg` (the content stream, the camera's rate, timestamped) |
 | The body silhouette mask | `/api/body/mask/mjpeg` (8-bit alpha, timestamped) |
 | 33 body landmarks + hands | the `body_state` WebSocket message |
 
-A discrete GPU is recommended; the page refuses software rendering rather
-than running badly.
+The page reads both picture streams itself (`streams.js`): parts are
+parsed and decoded as they arrive, newest frame only, nothing queued, and
+each part's `X-Timestamp` header gives capture-to-page latency on the
+panel's stats line. A discrete GPU is recommended; the page refuses
+software rendering rather than running badly.
 
 ## Install
 
@@ -41,7 +47,7 @@ than running badly.
 
 | Key | |
 |---|---|
-| **G** | the settings panel (Look: the preset's dials · Stage: layers, seeds, buffers) |
+| **G** | the settings panel (Look: the preset's dials · Stage: seeds, layers, buffers) |
 | **← →** | previous / next preset |
 | **R** | reload presets and settings from disk |
 | **H** | live numbers (fps, GPU time, stream rates and latency) |
@@ -49,18 +55,27 @@ than running badly.
 | **C** | clear the feedback frame |
 
 The panel's right column shows the output and the camera with landmarks;
-drag the divider to resize it. Every dial acts live; **Save** writes the
-preset; **Duplicate** copies it so you can iterate without losing the
-original.
+drag the divider to resize it. Every dial acts live. **Save** writes the
+preset, **Duplicate** copies it under the next free name so you can
+iterate safely, and **apply another preset's effect** copies a chosen
+preset's feed or show (with the dials it needs) into the one you are
+editing.
 
 ## The preset format
 
-A preset is one JSON entry: `dials` (each becomes a shader uniform; a dial
-may follow a live body reading such as wrist speed), `feed` (GLSL: what
-enters the feedback frame each step), `show` (GLSL: what reaches the
-screen), and `stage` (which body parts are drawn as seeds, the camera and
-matte layers, the buffers). [TUTORIAL.md](TUTORIAL.md) walks through
-building one from scratch and explains every input the shaders can read.
+A preset is one JSON entry: `dials`, `feed` (GLSL: what enters the
+feedback frame each step), `show` (GLSL: what reaches the screen), and
+`stage`. A dial can follow a live body reading (`bind` + `range`) or
+drive a Stage value (`stage`). The stage carries the body-as-seeds (the
+outline, bones, hand lines, landmark discs and mask fill, each with its
+own colour, drawn into the feedback, over the screen, or only into
+takes), the camera and matte layers, and the buffers: a **takes ring**
+(up to 25 snapshots with continuous per-take age), a stamp accumulator,
+the blurs, and per-step **diffusion** that melts the feedback's
+iterations together.
+
+[TUTORIAL.md](TUTORIAL.md) builds a preset from scratch and lists every
+input the shaders can read.
 
 Presets live in two files: `factory_presets.json` ships with the page and
 updates with it; `presets_config.json` is yours, written by Save, and a

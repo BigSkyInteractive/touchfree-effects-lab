@@ -59,7 +59,7 @@ export const SOURCES = [
 
 // ---- defaults: a file may lack any of these; nothing faults --------------------------------
 const DEFAULTS = {
-  current: '_template', key_black: 'on',
+  current: 'outlines', key_black: 'on',
   sources: Object.fromEntries(SOURCES.map((s) => [s.key, { in: [0, 1], invert: false, smooth: 0.7 }])),
   body: { min_visibility: 0.5, smoothing: 0.35, max_step: 0.25, idle_ms: 1200, z_in: [0.3, -0.5], speed_in: 1.2 },
 };
@@ -67,7 +67,7 @@ const STAGE_DEFAULTS = {
   // the body as seeds: each part with its own width, colour and alpha; into_frame writes them
   // into the feedback frame (the effect grows from them), off draws them over the screen
   body: {
-    into_frame: true, smooth: 0.7,
+    draw: 'frame', smooth: 0.7,   // 'frame' = seeds into the feedback each step, 'top' = over the screen, 'takes' = only burned into ring captures
     outline: { on: false, width: 0.005, color: [0.55, 0.85, 1.0], alpha: 0.18 },
     bones: { on: false, width: 0.02, color: [1.0, 0.85, 0.55], alpha: 0.45 },
     hands: { on: false, width: 0.01, color: [0.7, 0.9, 1.0], alpha: 0.5 },
@@ -76,7 +76,7 @@ const STAGE_DEFAULTS = {
   },
   camera_behind: false, opacity: 1.0,
   matte: { on: false, feather_in: 0.015, feather_out: 0.04, inside: 1.0, outside: 0.0 },   // the camera's opacity inside and outside the mask
-  history: 0, stamp_every: 0, stamp_fade: 1.0, cam_blur: 12, frame_blur: 24, mask_feather: 0.02, mask_smooth: 0, frame_scale: 1.0, diffuse: 0,
+  history: 0, history_every: 0, history_source: 'camera', stamp_every: 0, stamp_fade: 1.0, cam_blur: 12, frame_blur: 24, mask_feather: 0.02, mask_smooth: 0, frame_scale: 1.0, diffuse: 0,
 };
 function withDefaults(obj, def) {
   const out = Array.isArray(def) ? (Array.isArray(obj) ? obj.slice() : def.slice()) : {};
@@ -290,8 +290,8 @@ function feedBody() {
   u.tf_size = bodySize;
   // the dials bound to sources
   for (const [name, d] of Object.entries(preset ? preset.dials : {})) {
-    if (d.bind && d.bind !== 'none' && d.range) { const s = src[d.bind] || 0; engine.setDial(name, d.range[0] + (d.range[1] - d.range[0]) * s); }
-    else engine.setDial(name, d.value);
+    if (d.bind && d.bind !== 'none' && d.range) { const s = src[d.bind] || 0; setDial(name, d.range[0] + (d.range[1] - d.range[0]) * s); }
+    else setDial(name, d.value);
   }
 }
 
@@ -354,7 +354,7 @@ function buildBody() {
   engine.chains = chains;
   engine.discs = discs; engine.discColor = L.color || [1, 1, 1]; engine.discSoft = L.soft !== false;
   engine.fill = { color: B.fill.color || [1, 1, 1], alpha: B.fill.alpha || 0 };
-  engine.seedsIntoFrame = B.into_frame !== false;
+  engine.seedsMode = B.draw || (B.into_frame === false ? 'top' : 'frame');   // into_frame is the old form of this setting
 }
 
 // ---- presets ---------------------------------------------------------------------------------
@@ -368,6 +368,7 @@ function loadPreset(name) {
   catch (e) { const msg = String(e && e.message ? e.message : e); panelError = msg; toast('Preset "' + name + '" failed to compile<small>' + msg.split('\n')[0].slice(0, 160) + '</small>'); console.error('[lab] ' + msg); if (panel) panel.setError(msg); return false; }
   current = name; preset = copy; cfg.current = name;
   engine.stage = copy.stage; engine.clear();
+  for (const d of Object.values(copy.dials)) if (d.stage && d.stage in copy.stage) d.value = copy.stage[d.stage];   // the stage is the owner; the dial mirrors it
   if (panel) { panel.setError(''); panel.refresh(); }
   toast(name);
   return true;
@@ -394,6 +395,15 @@ async function deletePreset(name) {
   const ok = await postConfig('presets_config.json', disk);
   if (ok) { presets = mergePresets(disk); if (panel) panel.refresh(); }   // a shipped preset reappears in its shipped state
   return ok;
+}
+/* A dial may drive a Stage value instead of a shader uniform: its definition carries
+   "stage": "<key>" (stamp_every, stamp_fade, ...). The engine's stage is the one owner;
+   the dial writes through to it, and loadPreset reads the dial's shown value back from
+   the stage so the two can never disagree. */
+function setDial(name, v) {
+  const d = preset && preset.dials[name];
+  if (d && d.stage) { engine.stage[d.stage] = v; return; }
+  engine.setDial(name, v);
 }
 /* Recompile the working copy's text (the panel's Apply). Returns true or the message. */
 function applyText() {
@@ -475,12 +485,12 @@ function onKey(e) {
 
 const api = {
   cfg: () => cfg, presets: () => presets, presetNames, current: () => current, preset: () => preset,
-  loadPreset, savePreset, deletePreset, applyText, reloadFromDisk,
+  loadPreset, savePreset, deletePreset, applyText, reloadFromDisk, setDial,
   sources: () => ({ src, raw }), SOURCES,
   engine: () => engine, fxCanvas: () => $('fx'),
   applyKeyBlack, saveConfig: () => postConfig('lab_config.json', cfg).then((ok) => { if (ok) toast('Saved lab_config.json'); return ok; }),
   status: () => ({ fps, body: haveBody, cam: engine.haveCam, mask: engine.haveMask, renderMs: engine.stats.frameMs, gpu: rendererString, streams: { camera: streamStats(camStream), mask: streamStats(maskStream) }, maskLag: maskLag() }),
-  templateFrom: (name) => JSON.parse(JSON.stringify(presets.presets[name] || presets.presets._template)),
+  templateFrom: (name) => JSON.parse(JSON.stringify(presets.presets[name] || presets.presets.outlines)),
   LANDMARKS: LANDMARK_NAMES,
   setWorking: (p) => { preset = p; },
 };
@@ -496,7 +506,7 @@ const api = {
   engine = new LabEngine(canvas);
   window.addEventListener('resize', () => { engine.setSize(window.innerWidth, window.innerHeight); aspect = window.innerWidth / window.innerHeight; });
   applyKeyBlack();
-  if (!loadPreset(cfg.current in presets.presets ? cfg.current : presetNames()[0]) && !loadPreset('_template')) fault('no preset compiles; the compiler said: ' + panelError);
+  if (!loadPreset(cfg.current in presets.presets ? cfg.current : presetNames()[0]) && !loadPreset('outlines')) fault('no preset compiles; the compiler said: ' + panelError);
   panel = createPanel({ root: $('panel'), api });
   window.addEventListener('keydown', onKey);
   if (hudOn) $('hud').style.display = 'block';

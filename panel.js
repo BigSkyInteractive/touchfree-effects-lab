@@ -73,7 +73,7 @@ export function createPanel({ root, api }) {
       while (api.presets().presets[name]) { n++; name = base + ' ' + n; }
       api.savePreset(name).then((ok) => { if (ok) { saveName.value = name; refreshAll(); toast('duplicated as "' + name + '": edit away, the original is kept'); } });
     }),
-    button('New from template', () => { const p = api.templateFrom('_template'); api.setWorking(p); const r = api.applyText(); if (r !== true) errLine.textContent = r; saveName.value = ''; refreshAll(); toast('a new preset from the template: give it a name and Save as'); }),
+    button('New from outlines', () => { const p = api.templateFrom('outlines'); api.setWorking(p); const r = api.applyText(); if (r !== true) errLine.textContent = r; saveName.value = ''; refreshAll(); toast('a new preset started from outlines: give it a name and Save as'); }),
     button('Delete', () => { const n = api.current(); if (n && !n.startsWith('_') && confirm('Delete "' + n + '"?')) api.deletePreset(n).then(() => refreshAll()); }),
     toastEl, button('close (G)', () => hide()));
   refreshers.push(presetSel.refresh);
@@ -120,7 +120,28 @@ export function createPanel({ root, api }) {
     el('h3', null, 'show: what reaches the screen (ret, and alpha = how much it covers what is behind)'), showTa,
     el('div', 'note', 'Inputs: cam(uv) camBlur(uv) mask(uv) maskSoft(uv) maskGrad(uv) maskGrad(uv, reach) maskNear(uv, dist) frame(uv) frameSoft(uv) frameBlur(uv) cutout(uv) hist(k, uv) stamps(uv) background(uv) noise3(p) curl(p, t) wells(uv, push, sharp, base, speed_gain) hsv(h,s,v) lum(c) chroma(c) tf_<joint>_x/y/z/v tf_present time res aspect (= height/width), and the dials by name. uv: x right, y down, 0..1.'),
     button('Apply (Ctrl+Enter)', apply, 'save'), errLine);
-  pages.look.append(button('Text: the two shader bodies', () => { textOpen = !textOpen; textBox.style.display = textOpen ? '' : 'none'; refreshAll(); }), textBox);
+  // composition: copy another preset's feed or show (and the dials it needs) into the working copy
+  const copySel = select([], () => '', () => {});
+  copySel.refresh = () => {
+    const names = api.presetNames().filter((n) => n !== api.current());
+    if (copySel.dataset.sig !== names.join('|')) { copySel.dataset.sig = names.join('|'); copySel.textContent = ''; for (const n of names) { const o = el('option', null, n); o.value = n; copySel.appendChild(o); } }
+  };
+  refreshers.push(copySel.refresh);
+  function copyFrom(part) {
+    const src = api.presets().presets[copySel.value]; const p = api.preset();
+    if (!src || !p) return;
+    p[part] = src[part];
+    let added = 0;
+    for (const [n, d] of Object.entries(src.dials || {})) {
+      if (!(n in p.dials) && new RegExp('\\b' + n + '\\b').test(src[part])) { p.dials[n] = JSON.parse(JSON.stringify(d)); added++; }
+    }
+    const r = api.applyText(); errLine.textContent = r === true ? '' : r;
+    dialsFor = null; refreshAll();
+    toast('copied ' + part + ' from "' + copySel.value + '"' + (added ? ' with ' + added + ' of its dials' : '') + '; yours to edit, Save when it is right');
+  }
+  pages.look.append(button('Text: the two shader bodies', () => { textOpen = !textOpen; textBox.style.display = textOpen ? '' : 'none'; refreshAll(); }),
+    el('span', null, ' apply another preset\u2019s effect: '), copySel,
+    button('copy its feed', () => copyFrom('feed')), button('copy its show', () => copyFrom('show')), textBox);
   const dialsBinds = ['none', ...api.SOURCES.map((s) => s.key)];
   const dialsLabels = Object.fromEntries(api.SOURCES.map((s) => [s.key, s.label])); dialsLabels.none = 'no binding';
   let dialsFor = null;
@@ -134,8 +155,8 @@ export function createPanel({ root, api }) {
       const row = el('div', 'row');
       const nm = el('div', 'name', d.label || name); const hint = el('small', null, d.hint ? d.hint + ' (' + name + ')' : name); nm.appendChild(hint);
       const range = el('input'); range.type = 'range'; range.min = String(d.min ?? 0); range.max = String(d.max ?? 1); range.step = String(d.step ?? 0.01); range.value = String(d.value);
-      const num = number(() => d.value, (v) => { d.value = v; range.value = String(v); api.engine().setDial(name, v); }, { min: d.min ?? 0, max: d.max ?? 1, step: d.step ?? 0.01 });
-      range.addEventListener('input', () => { d.value = Number(range.value); num.value = range.value; api.engine().setDial(name, d.value); });
+      const num = number(() => d.value, (v) => { d.value = v; range.value = String(v); api.setDial(name, v); }, { min: d.min ?? 0, max: d.max ?? 1, step: d.step ?? 0.01 });
+      range.addEventListener('input', () => { d.value = Number(range.value); num.value = range.value; api.setDial(name, d.value); });
       const bind = el('div', 'bind');
       const bsel = select(dialsBinds, () => d.bind || 'none', (v) => { if (v === 'none') { delete d.bind; delete d.range; } else { d.bind = v; d.range = d.range || [d.min ?? 0, d.max ?? 1]; } refreshAll(); }, dialsLabels);
       bind.append(el('span', null, 'follows'), bsel);
@@ -158,11 +179,12 @@ export function createPanel({ root, api }) {
   const stageRows = [];
   function srow(label, ...controls) { const row = el('div', 'row stage'); const ctl = el('div', 'ctl'); ctl.append(...controls); row.append(el('div', 'name', label), ctl); row.refresh = () => { for (const c of controls) if (c.refresh) c.refresh(); }; stageBox.appendChild(row); stageRows.push(row); return row; }
   const part0 = () => ({ on: false, width: 0, color: [0, 0, 0], alpha: 0 });
-  const EMPTY_STAGE = { body: { into_frame: true, smooth: 0, outline: part0(), bones: part0(), hands: part0(), landmarks: { on: false, hands: false, use: [], size: 0, color: [0, 0, 0], alpha: 0, soft: true }, fill: { alpha: 0, color: [0, 0, 0] } },
-    camera_behind: false, opacity: 1, matte: { on: false, feather_in: 0, feather_out: 0, inside: 1, outside: 0 }, history: 0, stamp_every: 0, stamp_fade: 1, cam_blur: 0, frame_blur: 0, mask_feather: 0, mask_smooth: 0, frame_scale: 1, diffuse: 0 };
+  const EMPTY_STAGE = { body: { draw: 'frame', smooth: 0, outline: part0(), bones: part0(), hands: part0(), landmarks: { on: false, hands: false, use: [], size: 0, color: [0, 0, 0], alpha: 0, soft: true }, fill: { alpha: 0, color: [0, 0, 0] } },
+    camera_behind: false, opacity: 1, matte: { on: false, feather_in: 0, feather_out: 0, inside: 1, outside: 0 }, history: 0, stamp_every: 0, stamp_fade: 1, cam_blur: 0, frame_blur: 0, mask_feather: 0, mask_smooth: 0, frame_scale: 1, diffuse: 0, history_every: 0, history_source: 'camera' };
   const S = () => (api.preset() ? api.preset().stage : EMPTY_STAGE);   // no preset loaded: the rows show zeros, nothing faults
   stageBox.appendChild(el('h3', null, 'The body as seeds: what it writes into the feedback frame, or draws on top'));
-  srow('Seeds', check(() => S().body.into_frame, (v) => { S().body.into_frame = v; }, 'into the feedback frame (the effect grows from them); off = drawn over the screen'),
+  srow('Seeds', select(['frame', 'top', 'takes'], () => S().body.draw || (S().body.into_frame === false ? 'top' : 'frame'), (v) => { S().body.draw = v; delete S().body.into_frame; },
+      { frame: 'into the feedback frame every step (the effect grows from them)', top: 'drawn over the screen', takes: 'only burned into each take at capture; never into the live flow' }),
     el('span', null, 'curve smoothing'), snum(() => S().body.smooth, (v) => { S().body.smooth = v; }));
   const rgb = (get) => [0, 1, 2].map((i) => snum(() => get().color[i], (v) => { get().color[i] = v; }));
   const part = (label, key) => {
@@ -202,7 +224,10 @@ export function createPanel({ root, api }) {
   stageBox.appendChild(el('div', 'note', 'A dimmed row is one this preset\'s code never reads: moving it changes nothing here. It matters only to a preset whose feed or show calls that input.'));
   const bufRows = [];
   const bufRow = (fnNames, row) => { row.dataset.reads = fnNames; bufRows.push(row); return row; };
-  bufRow('hist', srow('History (frames kept)', snum(() => S().history, (v) => { S().history = Math.round(v); }, { min: 0, max: 8, step: 1 }), el('span', 'note', 'hist(k, uv): the camera k frames ago')));
+  bufRow('hist', srow('History ring', el('span', null, 'slots'), snum(() => S().history, (v) => { S().history = Math.round(v); }, { min: 0, max: 25, step: 1 }),
+    el('span', null, 'every (s)'), snum(() => S().history_every, (v) => { S().history_every = v; }, { min: 0, max: 20, step: 0.05 }),
+    select(['camera', 'cutout'], () => S().history_source, (v) => { S().history_source = v; }, { camera: 'the whole camera frame', cutout: 'the masked person + seeds (a take)' }),
+    el('span', 'note', 'hist(k, uv): slot k, newest first; 0 s = every frame; a slot the ring turns past is gone')));
   bufRow('stamps', srow('Stamps', el('span', null, 'every (s)'), snum(() => S().stamp_every, (v) => { S().stamp_every = v; }, { min: 0, max: 10, step: 0.1 }), el('span', null, 'fade per frame'), snum(() => S().stamp_fade, (v) => { S().stamp_fade = v; }, { min: 0.9, max: 1, step: 0.001 }), el('span', 'note', 'stamps(uv): the cutout added every N seconds; 0 = off')));
   bufRow('camBlur', srow('Camera blur (px)', snum(() => S().cam_blur, (v) => { S().cam_blur = v; }, { min: 0, max: 60, step: 1 }), el('span', 'note', 'camBlur(uv)')));
   bufRow('frameBlur', srow('Frame blur (px)', snum(() => S().frame_blur, (v) => { S().frame_blur = v; }, { min: 0, max: 80, step: 1 }), el('span', 'note', 'frameBlur(uv), the heavy one; frameSoft(uv) is always 3 px')));
