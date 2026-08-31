@@ -1,0 +1,90 @@
+{
+  "current": "silhouette effuse",
+  "key_black": "on",
+  "sources": {
+    "distance": {
+      "in": [
+        0.8,
+        3
+      ],
+      "invert": true,
+      "smooth": 0.85
+    },
+    "shoulder_width": {
+      "in": [
+        0.15,
+        0.32
+      ],
+      "invert": false,
+      "smooth": 0.85
+    },
+    "core_speed": {
+      "in": [
+        0,
+        0.8
+      ],
+      "invert": false,
+      "smooth": 0.7
+    },
+    "wrist_speed": {
+      "in": [
+        0,
+        2
+      ],
+      "invert": false,
+      "smooth": 0.7
+    },
+    "head_speed": {
+      "in": [
+        0,
+        0.8
+      ],
+      "invert": false,
+      "smooth": 0.7
+    },
+    "all_speed": {
+      "in": [
+        0,
+        1
+      ],
+      "invert": false,
+      "smooth": 0.7
+    },
+    "wrist_height": {
+      "in": [
+        -0.1,
+        0.4
+      ],
+      "invert": false,
+      "smooth": 0.7
+    },
+    "spread": {
+      "in": [
+        1,
+        3.2
+      ],
+      "invert": false,
+      "smooth": 0.8
+    },
+    "wrist_near": {
+      "in": [
+        0,
+        1
+      ],
+      "invert": false,
+      "smooth": 0.6
+    }
+  },
+  "body": {
+    "min_visibility": 0.5,
+    "smoothing": 0.35,
+    "max_step": 0.25,
+    "idle_ms": 1200,
+    "z_in": [
+      0.3,
+      -0.5
+    ],
+    "speed_in": 1.2
+  },
+  "about": "Effects Lab page settings. current = the preset that loads. key_black = black as transparency: on (the Spout stream carries it; on a screen black is black anyway), off, auto (only when loaded with transparent=1). sources = the body readings a dial can bind to, each a raw range mapped to 0..1, a smoothing and an inversion. body = the landmark ingest."
+}

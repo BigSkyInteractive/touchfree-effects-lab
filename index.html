@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Effects Lab</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000;
+               font-family: "Segoe UI", system-ui, sans-serif; }
+  html.transparent, html.transparent body { background: transparent; }
+  #fx { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #fault {
+    display: none; position: fixed; left: 4vw; top: 4vh; right: 4vw; z-index: 40;
+    padding: 16px 20px; border-radius: 10px; background: #3a1020;
+    border: 1px solid #a02040; color: #ffd7e2; white-space: pre-wrap;
+    font: 400 2vh/1.5 "Segoe UI", system-ui, sans-serif;
+  }
+  #toast {
+    position: fixed; top: 5vh; left: 50%; transform: translateX(-50%); z-index: 20;
+    max-width: 90vw; text-align: center; pointer-events: none;
+    font: 600 2.4vh/1.4 "Segoe UI", system-ui, sans-serif; color: #e8edf4;
+    text-shadow: 0 2px 12px #000; opacity: 0; transition: opacity 0.4s;
+  }
+  #toast small { display: block; font-weight: 400; font-size: 1.7vh; color: #9fb4cc; }
+  #hud {
+    display: none; position: fixed; bottom: 2vh; left: 2vw; z-index: 20;
+    font: 600 14px/1.5 Consolas, monospace; color: #9fd0ff; white-space: pre;
+    background: rgba(5, 7, 12, 0.65); padding: 8px 12px; border-radius: 6px;
+  }
+  #g { position: fixed; right: 2vmin; bottom: 1.6vmin; pointer-events: none;
+       font: 700 3vmin/1 "Segoe UI", system-ui, sans-serif; color: rgba(180, 210, 235, 0.5); transition: opacity 300ms ease; }
+
+  /* ---- the panel: Look and Stage --------------------------------------- */
+  #panel { display: none; position: fixed; inset: 0; z-index: 30; flex-direction: column;
+           background: #0b0f16; color: #d6e1ee; font-size: 13px; color-scheme: dark; }
+  #panel.open { display: flex; }
+  #panel .hdr { display: flex; align-items: center; gap: 14px; padding: 8px 16px; border-bottom: 1px solid rgba(180, 210, 235, 0.15); }
+  #panel .title { font-size: 15px; font-weight: 600; letter-spacing: 0.06em; color: #9fd0ff; }
+  #panel button { background: rgba(180, 210, 235, 0.10); color: #d6e1ee; border: 1px solid rgba(180, 210, 235, 0.25);
+                  border-radius: 4px; padding: 4px 10px; font: inherit; cursor: pointer; }
+  #panel button:hover { background: rgba(180, 210, 235, 0.22); }
+  #panel button.tab.on { background: rgba(99, 179, 237, 0.18); color: #fff; }
+  #panel button.save { background: #276749; border-color: #48bb78; color: #fff; }
+  #panel select, #panel input[type=number], #panel input[type=text] {
+    background: rgba(0, 0, 0, 0.35); color: #d6e1ee; border: 1px solid rgba(180, 210, 235, 0.25); border-radius: 4px; padding: 3px 6px; font: inherit; }
+  #panel input[type=number] { width: 84px; font: 13px Consolas, monospace; }
+  #panel input[type=range] { width: 260px; }
+  #panel .sn { display: inline-flex; align-items: center; gap: 6px; }
+  #panel .sn input[type=range] { width: 140px; }
+  #panel .body { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 8px var(--side-w, 33vw); column-gap: 8px; }
+  #panel .splitter { cursor: col-resize; border-radius: 4px; background: rgba(180, 210, 235, 0.10); align-self: stretch; }
+  #panel .splitter:hover, #panel .splitter.dragging { background: rgba(99, 179, 237, 0.45); }
+  #panel .main { min-width: 0; min-height: 0; overflow: auto; padding: 8px 24px 24px 16px; }
+  #panel .side { display: flex; flex-direction: column; gap: 10px; padding: 10px 14px 10px 0; border-left: 1px solid rgba(180, 210, 235, 0.15); }
+  #panel .view { position: relative; flex: 1; min-height: 0; background: #000; border-radius: 6px; overflow: hidden; border: 1px solid rgba(180, 210, 235, 0.15); }
+  #panel .view canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  #panel .vlabel { position: absolute; left: 8px; bottom: 6px; font: 11px Consolas, monospace; color: #9fd0ff; text-shadow: 0 1px 4px #000; }
+  #panel h3 { margin: 14px 0 6px; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #7f95ab;
+              border-bottom: 1px solid rgba(180, 210, 235, 0.15); padding-bottom: 3px; }
+  #panel .row { display: grid; grid-template-columns: 220px 270px 90px 1fr; align-items: center; gap: 10px; padding: 5px 0;
+                border-bottom: 1px solid rgba(180, 210, 235, 0.05); }
+  #panel .row .name { color: #e8edf4; }
+  #panel .row .name small { display: block; color: #7f95ab; font-size: 11px; }
+  #panel .row .bind { display: flex; gap: 6px; align-items: center; color: #7f95ab; font-size: 11px; }
+  #panel .row .bind input[type=number] { width: 64px; }
+  #panel .row.stage { grid-template-columns: 220px 1fr; }
+  #panel .row.stage .ctl { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+  #panel label.chk { display: inline-flex; align-items: center; gap: 4px; color: #b7c6d6; }
+  #panel .note { color: #d0a060; font-size: 12px; padding: 6px 0; }
+  #panel textarea { width: 100%; box-sizing: border-box; min-height: 160px; resize: vertical; font: 12px/1.4 Consolas, monospace;
+                    color: #e8f1ff; background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(180, 210, 235, 0.25); border-radius: 4px; padding: 6px 8px; tab-size: 2; }
+  #panel .err { color: #ff8a8a; white-space: pre-wrap; font: 12px Consolas, monospace; padding: 4px 0; }
+  #panel .stats { padding: 4px 16px 6px; font: 11px Consolas, monospace; color: #7f95ab; border-top: 1px solid rgba(180, 210, 235, 0.15); }
+</style>
+</head>
+<body>
+  <canvas id="fx"></canvas>
+  <div id="toast"></div>
+  <div id="hud"></div>
+  <div id="g" title="G: the panel">G</div>
+  <div id="panel"></div>
+  <div id="fault"></div>
+  <!-- ES modules, all vendored: the kiosk runs offline. -->
+  <script type="module" src="./lab.js"></script>
+</body>
+</html>

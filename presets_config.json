@@ -1,0 +1,4 @@
+{
+  "about": "The OPERATOR'S presets, written by the panel's Save, one entry at a time. Shipped presets live in factory_presets.json; an entry here with the same name shadows the shipped one.",
+  "presets": {}
+}
