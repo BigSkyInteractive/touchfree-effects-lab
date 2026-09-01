@@ -111,9 +111,12 @@ anything:
 
 A dial can also *follow* a body reading: set its **follows** to a source
 (wrist speed, body distance, hands raised...) and a range; the dial then
-rides the reading live. And a dial can *drive a Stage value*
-(`"stage": "history_every"`), which is how a preset puts buffer timing
-on a slider.
+rides the reading live. It can *cycle*: type a number of seconds into
+**cycle (s)** and it sweeps its whole range there and back on that
+clock, which is how a hue breathes through a palette. And it can *drive
+a Stage value* (`"stage": "history_every"`, dotted paths reach nested
+ones like `body.outline.width`), which is how a preset puts buffer
+timing or the outline's size on a slider.
 
 ## 6. Combining effects
 
@@ -125,10 +128,11 @@ takes, video effuse's feed, one changed injection line.
 
 ## 7. Keep it
 
-**Save as** with your name for it. Your preset lands in
-`presets_config.json` beside the shipped ones and survives updates. The
-files are plain JSON: version them, share them, or edit them in a text
-editor and press **R** in the page to reload.
+**Save as** with your name for it. Your preset becomes its own file,
+`presets/<name>.json`, beside the shipped ones in `factory_presets/`,
+and survives updates. The files are plain JSON: version them, share
+them, or edit one in a text editor and press **R** in the page to
+reload.
 
 ## Ideas that fall out in a few lines
 

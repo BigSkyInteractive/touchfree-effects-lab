@@ -4,13 +4,15 @@ Effects Lab: the page. docs/V6/V6_EFFECTS_V2_PLAN.md is the design.
 The page feeds the engine (engine/lab.js) three things every frame: the
 camera picture (the setup MJPEG, already mirrored), the body mask (the
 mask stream, unmirrored; the engine flips it), and the body as uniforms
-(tf_<joint>_x/y/z/v from body_state). A preset (presets_config.json) is
+(tf_<joint>_x/y/z/v from body_state). A preset (one file in presets/) is
 two GLSL bodies and its dials; a dial may be bound to a body source. The
 stage block says what of the body is drawn as lines and which layers are
 on. The panel (panel.js) is two tabs, Look and Stage.
 
 Files: lab_config.json (which preset loads, the sources' ranges, the
-landmark ingest) and presets_config.json (the presets). Both are written
+landmark ingest; written through /api/kiosk/content-config) and the preset
+files (presets/<name>.json, one each, written and deleted through
+/api/kiosk/content-presets). Configs are
 through /api/kiosk/content-config; a preset save writes only its own
 entry into the file as it is on disk. R re-reads both from disk and
 applies only what changed. Keys missing from a file take the defaults in
@@ -105,12 +107,27 @@ function postConfig(file, obj) {
 }
 
 // ---- state ----------------------------------------------------------------------------------
-let cfg = null, presets = null, factory = null, engine = null, panel = null;
-/* The presets the page shows: the factory file's (shipped with the code, updated with it)
-   under the operator's (presets_config.json, written by Save); an operator entry with the
-   same name wins, so edits survive updates and Delete returns a shipped preset to its
-   shipped state. */
-function mergePresets(op) { return { about: op.about, presets: { ...(factory ? factory.presets : {}), ...(op.presets || {}) } }; }
+let cfg = null, presets = null, engine = null, panel = null;
+/* ONE FILE PER PRESET (Tim, 2026-08-31). presets/<name>.json is the operator's, written
+   by Save and removed by Delete; factory_presets/<name>.json ships with the page. An
+   operator file with a factory name shadows it, so edits survive updates and Delete
+   returns a shipped preset to its shipped state. The server lists the folders
+   (/api/kiosk/content-presets); the files themselves are fetched as static files. */
+async function loadPresetFiles() {
+  const page = contentPageName();
+  let names = { operator: [], factory: [] };
+  if (page) {
+    const r = await fetch('/api/kiosk/content-presets?page=' + encodeURIComponent(page), { cache: 'no-store' });
+    const d = await r.json();
+    if (!d.ok) fault('the preset listing failed: ' + (d.error || r.status));
+    names = d;
+  }
+  const out = {};
+  for (const [dir, list] of [['factory_presets', names.factory], ['presets', names.operator]]) {
+    for (const n of list) out[n] = await fetchJson(dir + '/' + encodeURIComponent(n) + '.json');
+  }
+  return { presets: out, operatorNames: new Set(names.operator) };
+}
 let current = null, preset = null;            // the loaded preset's name and its working copy
 let aspect = 16 / 9, haveBody = false, lastBodyMs = 0, lastTs = 0, pose3d = null, rendererString = '(unknown)';
 const body = {}; let hands = {};
@@ -290,7 +307,13 @@ function feedBody() {
   u.tf_size = bodySize;
   // the dials bound to sources
   for (const [name, d] of Object.entries(preset ? preset.dials : {})) {
-    if (d.bind && d.bind !== 'none' && d.range) { const s = src[d.bind] || 0; setDial(name, d.range[0] + (d.range[1] - d.range[0]) * s); }
+    if (d.cycle > 0) {
+      // a time cycle: the dial sweeps its whole range there and back over d.cycle seconds
+      const lo = d.range ? d.range[0] : (d.min ?? 0), hi = d.range ? d.range[1] : (d.max ?? 1);
+      let t = (performance.now() / 1000 % d.cycle) / d.cycle;
+      t = t < 0.5 ? t * 2 : 2 - t * 2;
+      setDial(name, lo + (hi - lo) * t);
+    } else if (d.bind && d.bind !== 'none' && d.range) { const s = src[d.bind] || 0; setDial(name, d.range[0] + (d.range[1] - d.range[0]) * s); }
     else setDial(name, d.value);
   }
 }
@@ -368,41 +391,43 @@ function loadPreset(name) {
   catch (e) { const msg = String(e && e.message ? e.message : e); panelError = msg; toast('Preset "' + name + '" failed to compile<small>' + msg.split('\n')[0].slice(0, 160) + '</small>'); console.error('[lab] ' + msg); if (panel) panel.setError(msg); return false; }
   current = name; preset = copy; cfg.current = name;
   engine.stage = copy.stage; engine.clear();
-  for (const d of Object.values(copy.dials)) if (d.stage && d.stage in copy.stage) d.value = copy.stage[d.stage];   // the stage is the owner; the dial mirrors it
+  for (const d of Object.values(copy.dials)) if (d.stage) { const v = stageGet(copy.stage, d.stage); if (v !== undefined) d.value = v; }   // the stage is the owner; the dial mirrors it
   if (panel) { panel.setError(''); panel.refresh(); }
   toast(name);
   return true;
 }
-/* The working copy's dials, text and stage, saved under name: only this
-   entry is written, into the file as it is on disk. */
+/* Save writes ONE file: presets/<name>.json. */
 async function savePreset(name) {
   name = (name || '').trim(); if (!name || !preset) return false;
-  const disk = await fetchJson('presets_config.json');
-  disk.presets = disk.presets || {};
-  disk.presets[name] = JSON.parse(JSON.stringify({ format: 2, dials: preset.dials, feed: preset.feed, show: preset.show, stage: preset.stage }));
-  const ok = await postConfig('presets_config.json', disk);
-  if (!ok) return false;
-  presets = mergePresets(disk); current = name; cfg.current = name;
+  const page = contentPageName();
+  if (!page) { toast('Save needs the TouchFree app behind the page'); return false; }
+  const body = { page, name, preset: JSON.parse(JSON.stringify({ format: 2, dials: preset.dials, feed: preset.feed, show: preset.show, stage: preset.stage })) };
+  const r = await fetch('/api/kiosk/content-presets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((x) => x.json()).catch((e) => ({ ok: false, error: String(e) }));
+  if (!r.ok) { toast('Save failed: ' + (r.error || 'unknown')); return false; }
+  presets.presets[name] = body.preset; current = name; cfg.current = name;
   await postConfig('lab_config.json', cfg);
-  toast('Saved "' + name + '"');
+  toast('Saved presets/' + name + '.json');
   if (panel) panel.refresh();
   return true;
 }
+/* Delete removes the file; a factory preset with that name reappears in its shipped state. */
 async function deletePreset(name) {
-  const disk = await fetchJson('presets_config.json');
-  if (!disk.presets || !disk.presets[name]) return false;
-  delete disk.presets[name];
-  const ok = await postConfig('presets_config.json', disk);
-  if (ok) { presets = mergePresets(disk); if (panel) panel.refresh(); }   // a shipped preset reappears in its shipped state
-  return ok;
+  const page = contentPageName();
+  if (!page) return false;
+  const r = await fetch('/api/kiosk/content-presets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ page, name, delete: true }) }).then((x) => x.json()).catch((e) => ({ ok: false, error: String(e) }));
+  if (!r.ok) { toast('Delete failed: ' + (r.error || 'unknown')); return false; }
+  await reloadFromDisk();
+  return true;
 }
 /* A dial may drive a Stage value instead of a shader uniform: its definition carries
    "stage": "<key>" (stamp_every, stamp_fade, ...). The engine's stage is the one owner;
    the dial writes through to it, and loadPreset reads the dial's shown value back from
    the stage so the two can never disagree. */
+function stagePut(path, v) { const ks = path.split('.'); let o = engine.stage; for (let i = 0; i < ks.length - 1; i++) o = o[ks[i]] = o[ks[i]] || {}; o[ks[ks.length - 1]] = v; }
+function stageGet(st, path) { return path.split('.').reduce((o, k) => (o == null ? o : o[k]), st); }
 function setDial(name, v) {
   const d = preset && preset.dials[name];
-  if (d && d.stage) { engine.stage[d.stage] = v; return; }
+  if (d && d.stage) { stagePut(d.stage, v); return; }   // a dotted path reaches nested stage values (body.outline.width)
   engine.setDial(name, v);
 }
 /* Recompile the working copy's text (the panel's Apply). Returns true or the message. */
@@ -411,8 +436,7 @@ function applyText() {
   catch (e) { return String(e && e.message ? e.message : e); }
 }
 async function reloadFromDisk() {
-  factory = await fetchJson('factory_presets.json');
-  const p = mergePresets(await fetchJson('presets_config.json')); presets = p;
+  const p = await loadPresetFiles(); presets = p;
   const c = withDefaults(await fetchJson('lab_config.json'), DEFAULTS);
   cfg.sources = c.sources; cfg.body = c.body; cfg.key_black = c.key_black; applyKeyBlack();
   if (current && presets.presets[current]) loadPreset(current);
@@ -498,9 +522,8 @@ const api = {
 (async function boot() {
   checkGpu();
   cfg = withDefaults(await fetchJson('lab_config.json'), DEFAULTS);
-  factory = await fetchJson('factory_presets.json');
-  presets = mergePresets(await fetchJson('presets_config.json'));
-  if (!presets.presets || !Object.keys(presets.presets).length) fault('presets_config.json has no presets');
+  presets = await loadPresetFiles();
+  if (!presets.presets || !Object.keys(presets.presets).length) fault('no preset files found in presets/ or factory_presets/');
   const canvas = $('fx');
   canvas.width = window.innerWidth; canvas.height = window.innerHeight; aspect = canvas.width / canvas.height;
   engine = new LabEngine(canvas);

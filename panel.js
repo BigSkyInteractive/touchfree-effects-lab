@@ -164,10 +164,11 @@ export function createPanel({ root, api }) {
       const hi = number(() => (d.range ? d.range[1] : d.max ?? 1), (v) => { if (d.range) d.range[1] = v; }, { min: d.min ?? 0, max: d.max ?? 1, step: d.step ?? 0.01 });
       const bar = el('div'); bar.style.cssText = 'height:6px;width:80px;background:rgba(180,210,235,0.12);border-radius:3px;overflow:hidden';
       const fill = el('div'); fill.style.cssText = 'height:100%;width:0;background:#63b3ed'; bar.appendChild(fill);
-      bind.append(el('span', null, 'from'), lo, el('span', null, 'to'), hi, bar);
+      const cyc = number(() => d.cycle || 0, (v) => { if (v > 0) d.cycle = v; else delete d.cycle; }, { min: 0, max: 60, step: 0.1 });
+      bind.append(el('span', null, 'from'), lo, el('span', null, 'to'), hi, bar, el('span', null, 'cycle (s)'), cyc);
       row.append(nm, range, num, bind);
-      row.refresh = () => { num.refresh(); bsel.refresh(); lo.refresh(); hi.refresh(); const on = !!(d.bind && d.bind !== 'none'); lo.style.display = hi.style.display = bar.style.display = on ? '' : 'none'; if (!on) range.value = String(d.value); };
-      row.tick = () => { if (d.bind && d.bind !== 'none') { const s = api.sources().src[d.bind] || 0; fill.style.width = Math.round(s * 100) + '%'; const v = api.engine().uniforms[name]; if (v !== undefined) { range.value = String(v); if (document.activeElement !== num) num.value = String(Number(v).toFixed(4)); } } };
+      row.refresh = () => { num.refresh(); bsel.refresh(); lo.refresh(); hi.refresh(); cyc.refresh(); const on = !!(d.bind && d.bind !== 'none'); lo.style.display = hi.style.display = bar.style.display = on ? '' : 'none'; if (!on && !(d.cycle > 0)) range.value = String(d.value); };
+      row.tick = () => { if ((d.bind && d.bind !== 'none') || d.cycle > 0) { const s = api.sources().src[d.bind] || 0; fill.style.width = Math.round(s * 100) + '%'; const v = api.engine().uniforms[name]; if (v !== undefined) { range.value = String(v); if (document.activeElement !== num) num.value = String(Number(v).toFixed(4)); } } };
       dialsBox.appendChild(row);
     }
     feedTa.value = p.feed || ''; showTa.value = p.show || '';

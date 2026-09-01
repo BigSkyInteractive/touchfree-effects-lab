@@ -1,0 +1,288 @@
+{
+  "format": 2,
+  "dials": {
+    "decay": {
+      "value": 0.9,
+      "min": 0.8,
+      "max": 0.995,
+      "step": 0.001,
+      "label": "Decay",
+      "hint": "what survives each step; lower dies faster"
+    },
+    "rotate": {
+      "value": 0,
+      "min": 0,
+      "max": 0.3,
+      "step": 0.005,
+      "label": "Colour drift with age",
+      "hint": "the channels rotate as the light ages; the show turns that into hue. 0 none"
+    },
+    "effuse": {
+      "value": 0,
+      "min": 0,
+      "max": 0.02,
+      "step": 0.0005,
+      "label": "Effusion from the edge",
+      "hint": "how far the light is pushed out from the body's edge per step"
+    },
+    "effuse_reach": {
+      "value": 0.11,
+      "min": 0.01,
+      "max": 0.3,
+      "step": 0.005,
+      "label": "Effusion reach",
+      "hint": "how far from the edge the push is felt, screen heights"
+    },
+    "emit": {
+      "value": 0,
+      "min": 0,
+      "max": 0.05,
+      "step": 0.0005,
+      "label": "Emission from the joints",
+      "hint": "how far the light is pushed out from each joint per step"
+    },
+    "emit_reach": {
+      "value": 30,
+      "min": 2,
+      "max": 200,
+      "step": 1,
+      "label": "Joint tightness",
+      "hint": "bigger = felt closer to the joint only"
+    },
+    "emit_base": {
+      "value": 0.3,
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "label": "Joint strength at rest"
+    },
+    "emit_speed": {
+      "value": 1.2,
+      "min": 0,
+      "max": 3,
+      "step": 0.05,
+      "label": "Joint strength from speed",
+      "hint": "added as the joint moves"
+    },
+    "churn": {
+      "value": 2,
+      "min": 0,
+      "max": 3,
+      "step": 0.05,
+      "label": "Churn",
+      "hint": "the swirl that carries the light; 0 none"
+    },
+    "churn_size": {
+      "value": 20,
+      "min": 1,
+      "max": 30,
+      "step": 0.5,
+      "label": "Churn cells",
+      "hint": "cells per screen height; bigger = smaller cells"
+    },
+    "churn_speed": {
+      "value": 1,
+      "min": 0,
+      "max": 2,
+      "step": 0.01,
+      "label": "Churn evolution",
+      "hint": "how fast the cells change shape"
+    },
+    "boil": {
+      "value": 1.75,
+      "min": 0,
+      "max": 2,
+      "step": 0.05,
+      "label": "Boil on the surface",
+      "hint": "light born on the body in cells that come and go, a different pattern per colour; 0 none"
+    },
+    "marble": {
+      "value": 0,
+      "min": 0,
+      "max": 12,
+      "step": 0.5,
+      "label": "Marbling",
+      "hint": "each colour carried along the light's own gradient, pixels; 0 = a smooth glow"
+    },
+    "reach": {
+      "value": 0.4,
+      "min": 0.02,
+      "max": 0.6,
+      "step": 0.01,
+      "label": "Reach from the body",
+      "hint": "how far from the body the light lives, screen heights"
+    },
+    "fade": {
+      "value": 0.9,
+      "min": 0.5,
+      "max": 1,
+      "step": 0.005,
+      "label": "Fade beyond reach",
+      "hint": "per step at and beyond reach; lower dies faster"
+    },
+    "hue_min": {
+      "value": 0.3,
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "label": "Hue from",
+      "hint": "0.33 green, 0.5 cyan, 0.66 blue, 0.78 purple"
+    },
+    "hue_max": {
+      "value": 0.69,
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "label": "Hue to"
+    },
+    "hue_rate": {
+      "value": 0,
+      "min": 0,
+      "max": 0.05,
+      "step": 0.001,
+      "label": "Hue cycle with time",
+      "hint": "0.008 = one cycle every two minutes; 0 still"
+    },
+    "hue_age": {
+      "value": 0.4,
+      "min": 0,
+      "max": 2,
+      "step": 0.05,
+      "label": "Hue from age",
+      "hint": "how far the light's age moves the hue"
+    },
+    "saturation": {
+      "value": 0.75,
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "label": "Saturation",
+      "hint": "1 pure, 0.4 pastel"
+    },
+    "gain": {
+      "value": 1.5,
+      "min": 0,
+      "max": 5,
+      "step": 0.05,
+      "label": "Brightness"
+    },
+    "punch": {
+      "value": 1.0,
+      "min": 0,
+      "max": 2,
+      "step": 0.05,
+      "label": "Colour punch",
+      "hint": "1 = as computed, higher = richer, 0 = grey"
+    },
+    "inject": {
+      "value": 0.0,
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "label": "Picture painted in",
+      "hint": "the person's own video mixed into the light inside the mask; 0 = pure coloured light"
+    },
+    "level_min": {
+      "value": 0,
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "label": "Darkest inside the body"
+    },
+    "level_max": {
+      "value": 0.7,
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "label": "Brightest inside the body"
+    },
+    "seed_gain": {
+      "value": 2,
+      "min": 0,
+      "max": 3,
+      "step": 0.05,
+      "label": "The seeds on top",
+      "hint": "the outline, hands and discs, sharper than what they became"
+    }
+  },
+  "feed": "// 1. where this pixel takes its light from: toward the body's edge, toward the joints, through the churn\n//    (taking from nearer the body is what moves the light outward)\nvec2 g = maskGrad(uv, effuse_reach);\nfloat gl = length(g);\nvec2 p = uv;\nif (gl > 0.001) p += g / gl * effuse * min(1.0, gl * 2.0);\np += wells(uv, emit, emit_reach, emit_base, emit_speed);\nvec2 q = vec2(uv.x / aspect, uv.y);\np += curl(q * churn_size, time * churn_speed) * churn * 0.004;\n// 2. the marbling: each colour is fetched a little along the light's own gradient, so it folds into veins, not a glow\nvec2 px = vec2(marble / res.x, marble / res.y);\nvec3 gx = frameSoft(uv + vec2(px.x, 0.0)) - frameSoft(uv - vec2(px.x, 0.0));\nvec3 gy = frameSoft(uv + vec2(0.0, px.y)) - frameSoft(uv - vec2(0.0, px.y));\nvec3 old = vec3(frame(p + vec2(gx.r, gy.r) * px).r, frame(p + vec2(gx.g, gy.g) * px).g, frame(p + vec2(gx.b, gy.b) * px).b);\nold -= (old - frameBlur(p)) * 0.02;\n// 3. aged: its colour drifts, it decays, it dies beyond reach from the body\nold = mix(old, old.yzx, rotate) * decay;\nold *= mix(fade, 1.0, maskNear(uv, reach));\n// 4. the boil: cells born on the body, a different pattern in each colour, so the veins carry different hues.\n//    The cells are placed relative to the torso and sized by the body's size on screen (tf_size: the torso\n//    height, which holds steady when the person turns), so they travel with the body and keep their size\n//    as it comes nearer; a screen-fixed pattern under a moving mask is not emission.\nvec2 anchor = vec2(tf_torso_x, tf_torso_y);\nfloat sw = max(0.05, tf_size);\nvec2 bq = (vec2(uv.x / aspect, uv.y) - vec2(anchor.x / aspect, anchor.y)) / sw;\nvec3 c3 = vec3(bq * churn_size * 0.6, time * churn_speed);\nvec3 cells = vec3(noise3(c3), noise3(c3 + 17.3), noise3(c3 + 41.7)) * 0.65 + vec3(noise3(c3 * 2.2 + 3.1), noise3(c3 * 2.2 + 23.9), noise3(c3 * 2.2 + 57.2)) * 0.35;\nold += (cells - 0.5) * boil * mask(uv);\n// the picture painted in: the person's own video mixed into the light inside the mask; 0 = pure coloured light\nret = mix(old, cutout(uv), mask(uv) * inject);",
+  "show": "vec3 raw = frame(uv), soft = frameBlur(uv), fine = frameSoft(uv);\nfloat l = lum(soft);\n// the hue: from the light's age (the channel drift), a slow cycle, inside hue_min..hue_max\nfloat age = (soft.r - soft.b) + (soft.g - soft.r) * 0.7;\nfloat t = fract(0.5 + time * hue_rate + age * hue_age);\nt = t < 0.5 ? t * 2.0 : 2.0 - t * 2.0;\nvec3 col = hsv(mix(hue_min, hue_max, t), saturation, 1.0);\n// the brightness: between the two levels inside the body, fading to black outside it\nfloat inside = mask(uv);\nfloat b = level_min + (level_max - level_min) * pow(clamp(l * gain, 0.0, 1.0), 0.75);\nb = mix(clamp(l * gain * 2.0, 0.0, 1.0) * level_max, b, inside);\n// the seeds: what is sharper than its surroundings\nfloat seed = lum(clamp(raw - fine, 0.0, 1.0));\nret = col * (b + seed * seed_gain);\n// colour punch: 1 = as computed, higher = richer, 0 = grey\n// the picture painted in: the frame's TRUE colours (the injected video and its effused copies)\n// shown in place of the palette by the same dial; 0 = palette only\nret = mix(ret, raw * gain, clamp(inject * 1.2, 0.0, 1.0));\nret = mix(vec3(lum(ret)), ret, punch);\n// fully opaque: the Stage tab's Effect opacity alone decides how much video shows through\nalpha = 1.0;",
+  "stage": {
+    "body": {
+      "into_frame": true,
+      "smooth": 1,
+      "outline": {
+        "on": true,
+        "width": 0.01,
+        "color": [
+          0.2,
+          0.85,
+          1
+        ],
+        "alpha": 0.15
+      },
+      "bones": {
+        "on": false,
+        "width": 0.012,
+        "color": [
+          0.55,
+          0.85,
+          1
+        ],
+        "alpha": 0.25
+      },
+      "hands": {
+        "on": true,
+        "width": 0.01,
+        "color": [
+          0.7,
+          0.9,
+          1
+        ],
+        "alpha": 0.5
+      },
+      "landmarks": {
+        "on": true,
+        "hands": true,
+        "use": [
+          "left_eye",
+          "right_eye"
+        ],
+        "size": 0.015,
+        "color": [
+          1,
+          0.9,
+          0.7
+        ],
+        "alpha": 0.6,
+        "soft": true
+      },
+      "fill": {
+        "alpha": 0.05,
+        "color": [
+          1,
+          1,
+          1
+        ]
+      }
+    },
+    "camera_behind": true,
+    "opacity": 0.75,
+    "matte": {
+      "on": true,
+      "feather_in": 0.16,
+      "feather_out": 0,
+      "inside": 1,
+      "outside": 0
+    },
+    "history": 0,
+    "stamp_every": 0,
+    "stamp_fade": 1,
+    "cam_blur": 12,
+    "frame_blur": 24,
+    "mask_feather": 0.02,
+    "mask_smooth": 0,
+    "frame_scale": 1,
+    "diffuse": 0
+  }
+}

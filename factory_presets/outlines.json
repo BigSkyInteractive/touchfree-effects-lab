@@ -1,0 +1,211 @@
+{
+  "format": 2,
+  "about": "A series of takes: every few seconds the person, outline and all, is snapshotted out of the video into its own layer. Takes age, dissolve to nothing and are deleted (the engine's history ring in cutout mode); nothing accumulates, so nothing smudges. The live picture can be dialled to black behind them.",
+  "dials": {
+    "backing": {
+      "value": 1.0,
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "label": "Live background",
+      "hint": "1 = the full live picture behind everything, 0 = black; the person and the takes remain"
+    },
+    "takes": {
+      "value": 1.0,
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "label": "Takes opacity",
+      "hint": "how solidly the takes sit over the background"
+    },
+    "take_every": {
+      "value": 2.0,
+      "min": 0.25,
+      "max": 20,
+      "step": 0.25,
+      "label": "Seconds between takes",
+      "hint": "a new take this often; six are kept, the oldest is deleted",
+      "stage": "history_every"
+    },
+    "take_count": {
+      "value": 8,
+      "min": 1,
+      "max": 25,
+      "step": 1,
+      "label": "Takes kept",
+      "hint": "its own layer each; one falls off the end as a new one arrives",
+      "stage": "history"
+    },
+    "life": {
+      "value": 3.0,
+      "min": 0.1,
+      "max": 30,
+      "step": 0.1,
+      "label": "Take life (seconds)",
+      "hint": "how long a take lives; it fades and dissolves continuously over this time, as fast as you like"
+    },
+    "dissolve": {
+      "value": 0.7,
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "label": "Dissolve",
+      "hint": "0 = takes fade evenly, 1 = they are eaten away in a ragged pattern as they age"
+    },
+    "grain": {
+      "value": 8,
+      "min": 2,
+      "max": 30,
+      "step": 0.5,
+      "label": "Dissolve grain",
+      "hint": "size of the eaten pattern; bigger = finer"
+    },
+    "tint": {
+      "value": 0.6,
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "label": "Tint the takes",
+      "hint": "0 = the takes keep the video's colours, 1 = fully coloured by the hue"
+    },
+    "hue": {
+      "value": 0.58,
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "label": "Takes hue",
+      "hint": "0 red, 0.33 green, 0.58 cyan-blue, 0.78 purple"
+    },
+    "saturation": {
+      "value": 0.6,
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "label": "Takes saturation"
+    },
+    "live_solid": {
+      "value": 0.85,
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "label": "The person now",
+      "hint": "how solid the live person stands over the takes"
+    },
+    "outline_size": {
+      "value": 0.004,
+      "min": 0,
+      "max": 0.1,
+      "step": 0.001,
+      "label": "Outline size",
+      "hint": "the outline's width in screen heights, up to very fat; burned into each take at capture",
+      "stage": "body.outline.width"
+    },
+    "outline_strength": {
+      "value": 0.5,
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "label": "Outline strength",
+      "hint": "0 removes the outline entirely",
+      "stage": "body.outline.alpha"
+    },
+    "glow": {
+      "value": 0.8,
+      "min": 0,
+      "max": 3,
+      "step": 0.05,
+      "label": "Outline glow",
+      "hint": "the edge trail from the outline seeds (the feedback frame)"
+    },
+    "fade": {
+      "value": 0.94,
+      "min": 0.5,
+      "max": 0.995,
+      "step": 0.001,
+      "label": "Outline trail length",
+      "hint": "how much of the edge trail survives each step"
+    }
+  },
+  "feed": "// the feedback frame carries only the outline seeds (drawn in by the Stage); they fade into a trail\nret = frame(uv) * fade;",
+  "show": "// the live picture (dialled to black by backing), the takes oldest-under-newest, the person now, the edge trail\nvec3 live = cam(uv);\nvec3 c = live * backing;\nvec2 q = vec2(uv.x / aspect, uv.y);\nfor (int k = 24; k >= 0; k--) {\n  if (k >= hist_n) continue;\n  vec3 t = hist(k, uv);\n  float pres = clamp(lum(t) * 6.0, 0.0, 1.0);            // where this take has content\n  float w = exp(-histAge(k) / max(0.05, life));           // CONTINUOUS age in seconds: no steps, no snap\n  float n = noise3(vec3(q * grain, float(k) * 7.31));     // a fixed ragged pattern per take\n  float gate = mix(1.0, smoothstep(0.0, 0.25, w - n * (1.0 - w)), dissolve);   // eaten along the pattern as it ages\n  vec3 col = mix(t, hsv(hue, saturation, 1.0) * lum(t), tint);\n  c = mix(c, col, pres * w * gate * takes);\n}\nc = mix(c, live, mask(uv) * live_solid);\nc += frame(uv) * glow;\nret = c;\nalpha = 1.0;",
+  "stage": {
+    "body": {
+      "into_frame": true,
+      "smooth": 1.0,
+      "outline": {
+        "on": true,
+        "width": 0.004,
+        "color": [
+          0.55,
+          0.85,
+          1.0
+        ],
+        "alpha": 0.5
+      },
+      "bones": {
+        "on": false,
+        "width": 0.012,
+        "color": [
+          0.55,
+          0.85,
+          1.0
+        ],
+        "alpha": 0.25
+      },
+      "hands": {
+        "on": false,
+        "width": 0.01,
+        "color": [
+          0.7,
+          0.9,
+          1.0
+        ],
+        "alpha": 0.5
+      },
+      "landmarks": {
+        "on": false,
+        "hands": false,
+        "use": [
+          "left_eye",
+          "right_eye"
+        ],
+        "size": 0.015,
+        "color": [
+          1.0,
+          0.9,
+          0.7
+        ],
+        "alpha": 0.6,
+        "soft": true
+      },
+      "fill": {
+        "alpha": 0,
+        "color": [
+          0.55,
+          0.85,
+          1.0
+        ]
+      }
+    },
+    "camera_behind": false,
+    "opacity": 1.0,
+    "matte": {
+      "on": false,
+      "feather_in": 0.03,
+      "feather_out": 0.03,
+      "inside": 1.0,
+      "outside": 0.0
+    },
+    "history": 8,
+    "stamp_every": 0,
+    "stamp_fade": 0.9995,
+    "cam_blur": 12,
+    "frame_blur": 24,
+    "mask_feather": 0.02,
+    "mask_smooth": 0,
+    "frame_scale": 1.0,
+    "diffuse": 0,
+    "history_every": 2.0,
+    "history_source": "cutout"
+  }
+}

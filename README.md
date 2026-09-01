@@ -65,8 +65,9 @@ editing.
 
 A preset is one JSON entry: `dials`, `feed` (GLSL: what enters the
 feedback frame each step), `show` (GLSL: what reaches the screen), and
-`stage`. A dial can follow a live body reading (`bind` + `range`) or
-drive a Stage value (`stage`). The stage carries the body-as-seeds (the
+`stage`. A dial can follow a live body reading (`bind` + `range`), cycle its
+whole range over N seconds (`cycle`), or drive a Stage value by dotted
+path (`stage`). The stage carries the body-as-seeds (the
 outline, bones, hand lines, landmark discs and mask fill, each with its
 own colour, drawn into the feedback, over the screen, or only into
 takes), the camera and matte layers, and the buffers: a **takes ring**
@@ -77,9 +78,11 @@ iterations together.
 [TUTORIAL.md](TUTORIAL.md) builds a preset from scratch and lists every
 input the shaders can read.
 
-Presets live in two files: `factory_presets.json` ships with the page and
-updates with it; `presets_config.json` is yours, written by Save, and a
-preset there with the same name wins, so your edits survive updates.
+Every preset is its own file: `factory_presets/<name>.json` ships with
+the page and updates with it; `presets/<name>.json` is yours, written by
+Save and removed by Delete, and a file there with a shipped name wins,
+so your edits survive updates. Copy a preset to another machine by
+copying its file.
 
 ## Output with alpha (OBS, Resolume, TouchDesigner)
 

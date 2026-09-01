@@ -1,0 +1,225 @@
+{
+  "format": 2,
+  "dials": {
+    "inject": {
+      "value": 0.25,
+      "min": 0.02,
+      "max": 1,
+      "step": 0.01,
+      "label": "Picture painted in",
+      "hint": "how strongly the live cutout replaces the flowing copy inside the body each step; low = long dreamy smears, high = crisp body with short flames"
+    },
+    "boil": {
+      "value": 2.5,
+      "min": 0,
+      "max": 3,
+      "step": 0.05,
+      "label": "Boil in the body",
+      "hint": "the video's own pixels roil in place inside the mask: the fresh picture is taken through a swirling lens; 0 = a still picture"
+    },
+    "decay": {
+      "value": 0.925,
+      "min": 0.8,
+      "max": 0.995,
+      "step": 0.001,
+      "label": "Decay",
+      "hint": "what survives each step; lower dies faster"
+    },
+    "effuse": {
+      "value": 0,
+      "min": 0,
+      "max": 0.02,
+      "step": 0.0005,
+      "label": "Effusion from the edge",
+      "hint": "how far the picture is pushed out from the body's edge per step"
+    },
+    "effuse_reach": {
+      "value": 0.025,
+      "min": 0.01,
+      "max": 0.3,
+      "step": 0.005,
+      "label": "Effusion reach",
+      "hint": "how far from the edge the push is felt, screen heights"
+    },
+    "emit": {
+      "value": 0.008,
+      "min": 0,
+      "max": 0.05,
+      "step": 0.0005,
+      "label": "Emission from the joints"
+    },
+    "emit_reach": {
+      "value": 30,
+      "min": 2,
+      "max": 200,
+      "step": 1,
+      "label": "Joint tightness",
+      "hint": "bigger = felt closer to the joint only"
+    },
+    "emit_base": {
+      "value": 0.3,
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "label": "Joint strength at rest"
+    },
+    "emit_speed": {
+      "value": 1.2,
+      "min": 0,
+      "max": 3,
+      "step": 0.05,
+      "label": "Joint strength from speed"
+    },
+    "churn": {
+      "value": 2.75,
+      "min": 0,
+      "max": 3,
+      "step": 0.05,
+      "label": "Churn",
+      "hint": "the swirl that carries the picture; 0 none"
+    },
+    "churn_size": {
+      "value": 15,
+      "min": 1,
+      "max": 30,
+      "step": 0.5,
+      "label": "Churn cells",
+      "hint": "cells per screen height; bigger = smaller cells"
+    },
+    "churn_speed": {
+      "value": 1.05,
+      "min": 0,
+      "max": 2,
+      "step": 0.01,
+      "label": "Churn evolution",
+      "hint": "how fast the swirl changes shape"
+    },
+    "marble": {
+      "value": 11,
+      "min": 0,
+      "max": 12,
+      "step": 0.5,
+      "label": "Marbling",
+      "hint": "each colour carried along the picture's own edges; 0 = a smooth smear"
+    },
+    "reach": {
+      "value": 0.35,
+      "min": 0.02,
+      "max": 0.6,
+      "step": 0.01,
+      "label": "Reach from the body",
+      "hint": "how far from the body the picture lives, screen heights"
+    },
+    "fade": {
+      "value": 1,
+      "min": 0.5,
+      "max": 1,
+      "step": 0.005,
+      "label": "Fade beyond reach",
+      "hint": "per step at and beyond reach; lower dies faster"
+    },
+    "rotate": {
+      "value": 0,
+      "min": 0,
+      "max": 0.3,
+      "step": 0.005,
+      "label": "Colour drift with age",
+      "hint": "0 keeps the video's own colours; higher shifts the hue as the light ages"
+    },
+    "gain": {
+      "value": 1,
+      "min": 0,
+      "max": 3,
+      "step": 0.05,
+      "label": "Brightness"
+    },
+    "punch": {
+      "value": 1.25,
+      "min": 0,
+      "max": 2,
+      "step": 0.05,
+      "label": "Colour punch",
+      "hint": "1 = the video as it is, higher = richer, 0 = grey"
+    }
+  },
+  "feed": "// where this pixel takes its light from: toward the body's edge, toward the joints, through the churn\nvec2 g = maskGrad(uv, effuse_reach);\nfloat gl = length(g);\nvec2 p = uv;\nif (gl > 0.001) p += g / gl * effuse * min(1.0, gl * 2.0);\np += wells(uv, emit, emit_reach, emit_base, emit_speed);\nvec2 q = vec2(uv.x / aspect, uv.y);\np += curl(q * churn_size, time * churn_speed) * churn * 0.004;\n// the marbling: each colour carried a little along the light's own gradient, so the picture folds into veins\nvec2 px = vec2(marble / res.x, marble / res.y);\nvec3 gx = frameSoft(uv + vec2(px.x, 0.0)) - frameSoft(uv - vec2(px.x, 0.0));\nvec3 gy = frameSoft(uv + vec2(0.0, px.y)) - frameSoft(uv - vec2(0.0, px.y));\nvec3 old = vec3(frame(p + vec2(gx.r, gy.r) * px).r, frame(p + vec2(gx.g, gy.g) * px).g, frame(p + vec2(gx.b, gy.b) * px).b);\n// aged: optional colour drift, decay, death beyond reach from the body\nold = mix(old, old.yzx, rotate) * decay;\nold *= mix(fade, 1.0, maskNear(uv, reach));\n// the source is the person's own picture, taken through a swirling lens: inside the mask the video's\n// pixels roil in place (the boil), and what the lens displaces is scaled by the mask so the edge holds\nvec2 wob = curl(q * churn_size * 2.0, time * churn_speed * 1.4) * boil * 0.01 * mask(uv);\nvec3 me = cutout(uv + wob);\nret = mix(old, me, mask(uv) * inject);",
+  "show": "// the video's own colours, lifted a little; the camera sits behind, the matte cuts the room\nvec3 t = frame(uv) * gain;\nvec3 col = mix(vec3(lum(t)), t, punch);\nret = col;\nalpha = 1.0;",
+  "stage": {
+    "body": {
+      "into_frame": true,
+      "smooth": 1,
+      "outline": {
+        "on": false,
+        "width": 0.005,
+        "color": [
+          0.55,
+          0.85,
+          1
+        ],
+        "alpha": 0.18
+      },
+      "bones": {
+        "on": false,
+        "width": 0.012,
+        "color": [
+          0.55,
+          0.85,
+          1
+        ],
+        "alpha": 0.25
+      },
+      "hands": {
+        "on": false,
+        "width": 0.01,
+        "color": [
+          0.7,
+          0.9,
+          1
+        ],
+        "alpha": 0.5
+      },
+      "landmarks": {
+        "on": false,
+        "hands": false,
+        "use": [
+          "left_eye",
+          "right_eye"
+        ],
+        "size": 0.015,
+        "color": [
+          1,
+          0.9,
+          0.7
+        ],
+        "alpha": 0.6,
+        "soft": true
+      },
+      "fill": {
+        "alpha": 0,
+        "color": [
+          0.55,
+          0.85,
+          1
+        ]
+      }
+    },
+    "camera_behind": true,
+    "opacity": 0.8,
+    "matte": {
+      "on": true,
+      "feather_in": 0.03,
+      "feather_out": 0.03,
+      "inside": 1,
+      "outside": 0
+    },
+    "history": 0,
+    "stamp_every": 4,
+    "stamp_fade": 1,
+    "cam_blur": 0,
+    "frame_blur": 0,
+    "mask_feather": 0.08,
+    "mask_smooth": 0.35,
+    "frame_scale": 1,
+    "diffuse": 3.5
+  }
+}
