@@ -1,7 +1,7 @@
 # TouchFree Effects Lab
 
-Body-driven feedback effects for [TouchFree](https://bigskyinteractive.com):
-the live camera, the person's silhouette and 33 body landmarks feed a WebGL
+Body, hand, face, and video driven feedback effects for [TouchFree](https://bigskyinteractive.com):
+the live camera, the person's real-time body, hand and face feed a WebGL
 flow engine, and an effect is a **preset**: two short shader bodies and a
 set of dials, editable live in the page's own panel. Free to use and to
 build on (MIT).
